@@ -113,7 +113,7 @@ NDEBUG:=-D'VM_LABEL(foo)=0'
 DEBUGVM=0
 else
 OFLAGS:= -D_MT -march=pentium4
-NDEBUG:=-DNODBGPRINT-1 -D'VM_LABEL(foo)=0'
+NDEBUG:=-DNODBGPRINT=1 -D'VM_LABEL(foo)=0'
 DEBUGVM=1
 endif
 
@@ -256,8 +256,12 @@ endif
 $(OBJDIR):
 	@-mkdir $(BLDDIR)
 	mkdir $(OBJDIR)
+ifneq ($(INTERNAL_PLUGINS),)
 	mkdir $(addprefix $(BLDDIR)/, $(INTERNAL_PLUGINS))
+endif
+ifneq ($(EXTERNAL_PLUGINS),)
 	mkdir $(addprefix $(BLDDIR)/, $(EXTERNAL_PLUGINS))
+endif
 
 #############################################################################
 # The exports for named primitives from Squeak (required by VM)
