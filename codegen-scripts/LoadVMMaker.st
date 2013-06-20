@@ -5,5 +5,5 @@ Gofer new
 	
 ((Smalltalk at: #ConfigurationOfOzVM) project version: '1.0') load.
 
-(Smalltalk saveAs: 'generator.image') 
+(Smalltalk saveAs: 'generator') 
     ifFalse: [ Smalltalk snapshot: false andQuit: true ]
