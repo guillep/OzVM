@@ -1,9 +1,9 @@
 Gofer new
-	squeaksource: 'MetacelloRepository';
-	package: 'ConfigurationOfCog';
+	smalltalkhubUser: 'Guille' project: 'ObjectSpace';
+	configurationOf: 'OzVM';
 	load.
 	
-((Smalltalk at: #ConfigurationOfCog) project version: '6.4') load.
+((Smalltalk at: #ConfigurationOfOzVM) project version: '1.0') load.
 
 (Smalltalk saveAs: 'generator.image') 
     ifFalse: [ Smalltalk snapshot: false andQuit: true ]
