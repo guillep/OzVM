@@ -23,7 +23,7 @@ else
     exit 1;
 fi
 
-ZIPFILE=OzVM-${OS}-${RELEASE}.zip
+ZIPFILE=OzVm-${OS}-${RELEASE}.zip
 
 cd results
 zip -r "$ZIPFILE" *
