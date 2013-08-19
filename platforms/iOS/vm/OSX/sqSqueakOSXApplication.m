@@ -129,6 +129,12 @@ void mtfsfi(unsigned long long fpscr) {}
 	[self parseEnv: [p environment]];
 }
 
+- (void) attachToSignals {
+    if (![self noHandlers]) {
+        attachToSignals();
+    }
+}
+
 - (NSInteger) parseArgument: (NSString *) argData peek: (NSString *) peek {
 	
 	if ([argData compare: @"--"] == NSOrderedSame) {
@@ -152,6 +158,10 @@ void mtfsfi(unsigned long long fpscr) {}
         gSqueakHeadless = YES;
 		return 1;
 	}
+    if ([argData compare: @"--nohandlers"] == NSOrderedSame){
+        [self setNoHandlers: YES];
+        return 1;
+    }
 	if ([argData compare: @"--memory"] == NSOrderedSame) {
 		gMaxHeapSize = (usqInt) [self strtobkm: [peek UTF8String]];
 		return 2;
@@ -245,6 +255,7 @@ void mtfsfi(unsigned long long fpscr) {}
 	printf("  --help                 print this help message, then exit\n");
 	printf("  --memory <size>[mk]    use fixed heap size (added to image size)\n");
 	printf("  --headless             run in headless (no window) mode (default: false)\n");
+    printf("  --nohandlers           disable sigsegv & sigusr1 handlers\n");
 }
 
 - (void) printUsageNotes
