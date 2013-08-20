@@ -3,7 +3,7 @@ Gofer new
 	configurationOf: 'OzVM';
 	load.
 	
-((Smalltalk at: #ConfigurationOfOzVM) project version: '1.0') load.
+((Smalltalk at: #ConfigurationOfOzVM) project version: '1.1') load.
 
 (Smalltalk saveAs: 'generator') 
     ifFalse: [ Smalltalk snapshot: false andQuit: true ]
