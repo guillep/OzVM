@@ -236,7 +236,8 @@ void ioInitThreads();
 # define INITIAL_EXT_SEM_TABLE_SIZE 256
 #endif
 int   ioGetMaxExtSemTableSize(void);
-void  ioSetMaxExtSemTableSize(int);
+void  ioSetMaxExtSemTableSize(int, int);
+void  ioSetExtSemTableIndex(int);
 
 /* these are used both in the STACKVM & the COGMTVM */
 # if !defined(ioCurrentOSThread)

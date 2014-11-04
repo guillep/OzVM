@@ -70,21 +70,30 @@ typedef struct {
 #endif
 	} SignalRequest;
 
-static SignalRequest *signalRequests = 0;
-static int numSignalRequests = 0;
-static volatile sqInt checkSignalRequests;
+typedef struct {
+    SignalRequest *signalRequests;
+    int numSignalRequests;
+    sqInt checkSignalRequests;
+    int tideLock;
+    int useTideA;
+    sqInt lowTideA, highTideA;
+    sqInt lowTideB, highTideB;
+} SignalTable;
+
+static int currentTable = 0;
+static SignalTable tables[2];
 
 /* The tides define the minimum range of indices into signalRequests that the
  * VM needs to scan.  With potentially thousands of indices to scan this can
  * save significant lengths of time.
  */
-static volatile int tideLock = 0;
-static volatile int useTideA = 1;
-static volatile sqInt lowTideA = (unsigned long)-1 >> 1, highTideA = -1;
-static volatile sqInt lowTideB = (unsigned long)-1 >> 1, highTideB = -1;
+//static volatile int tideLock = 0;
+//static volatile int useTideA = 1;
+//static volatile sqInt lowTideA = (unsigned long)-1 >> 1, highTideA = -1;
+//static volatile sqInt lowTideB = (unsigned long)-1 >> 1, highTideB = -1;
 
 int
-ioGetMaxExtSemTableSize(void) { return numSignalRequests; }
+ioGetMaxExtSemTableSize(void) { return tables[currentTable].numSignalRequests; }
 
 /* Setting this at any time other than start-up can potentially lose requests.
  * i.e. during the realloc new storage is allocated, the old contents are copied
@@ -95,12 +104,17 @@ ioGetMaxExtSemTableSize(void) { return numSignalRequests; }
  * maximum at start-up and avoid locking altogether.
  */
 void
-ioSetMaxExtSemTableSize(int n)
+ioSetMaxExtSemTableSize(int n, int index)
 {
 #if COGMTVM
   /* initialization is a little different in MT. Hack around assert for now */
   if (getVMOSThread())
 #endif
+    
+      SignalRequest *signalRequests = 0;
+    int numSignalRequests = 0;
+    sqInt checkSignalRequests;
+    
 	if (numSignalRequests)
 		assert(ioOSThreadsEqual(ioCurrentOSThread(),getVMOSThread()));
 	if (numSignalRequests < n) {
@@ -112,13 +126,32 @@ ioSetMaxExtSemTableSize(int n)
 				0,
 				(sz - numSignalRequests) * sizeof(SignalRequest));
 		numSignalRequests = sz;
+        
+        tables[index].signalRequests = signalRequests;
+        tables[index].numSignalRequests = numSignalRequests;
+        tables[index].checkSignalRequests = checkSignalRequests;
+        tables[index].tideLock = 0;
+        tables[index].useTideA = 1;
+        tables[index].lowTideA = (unsigned long)-1 >> 1;
+        tables[index].highTideA = -1;
+        tables[index].lowTideB = (unsigned long)-1 >> 1;
+        tables[index].highTideB = -1;
 	}
+}
+
+void
+ioSetExtSemTableIndex(int index){
+    if (index > 1) error("not a correct index");
+    
+    currentTable = index;
 }
 
 void
 ioInitExternalSemaphores(void)
 {
-	ioSetMaxExtSemTableSize(INITIAL_EXT_SEM_TABLE_SIZE);
+	
+    ioSetMaxExtSemTableSize(INITIAL_EXT_SEM_TABLE_SIZE, 0);
+    ioSetMaxExtSemTableSize(INITIAL_EXT_SEM_TABLE_SIZE, 1);
 }
 
 /* Signal the external semaphore with the given index.  Answer non-zero on
@@ -129,45 +162,54 @@ ioInitExternalSemaphores(void)
 sqInt
 signalSemaphoreWithIndex(sqInt index)
 {
+    baseSignalSemaphoreWithIndex(index, 0);
+    baseSignalSemaphoreWithIndex(index, 1);
+    
+    forceInterruptCheck();
+	return 1;
+}
+
+sqInt
+baseSignalSemaphoreWithIndex(sqInt index, int table)
+{
 	int i = index - 1;
 	int v;
 
 	/* An index of zero should be and is silently ignored. */
-	assert(index >= 0 && index <= numSignalRequests);
+	//assert(index >= 0 && index <= numSignalRequests);
 
-	if ((unsigned)i >= numSignalRequests)
+	if ((unsigned)i >= tables[table].numSignalRequests)
 		return 0;
 
 	sqLowLevelMFence();
-	sqAtomicAddConst(signalRequests[i].requests,1);
-	if (useTideA) {
+	sqAtomicAddConst(tables[table].signalRequests[i].requests,1);
+	if (tables[table].useTideA) {
 		/* atomic if (lowTideA > i) lowTideA = i; */
-		while ((v = lowTideA) > i) {
+		while ((v = tables[table].lowTideA) > i) {
 			sqLowLevelMFence();
-			sqCompareAndSwap(lowTideA, v, i);
+			sqCompareAndSwap(tables[table].lowTideA, v, i);
 		}
 		/* atomic if (highTideA < i) highTideA = i; */
-		while ((v = highTideA) < i) {
+		while ((v = tables[table].highTideA) < i) {
 			sqLowLevelMFence();
-			sqCompareAndSwap(highTideA, v, i);
+			sqCompareAndSwap(tables[table].highTideA, v, i);
 		}
 	}
 	else {
 		/* atomic if (lowTideB > i) lowTideB = i; */
-		while ((v = lowTideB) > i) {
+		while ((v = tables[table].lowTideB) > i) {
 			sqLowLevelMFence();
-			sqCompareAndSwap(lowTideB, v, i);
+			sqCompareAndSwap(tables[table].lowTideB, v, i);
 		}
 		/* atomic if (highTideB < i) highTideB = i; */
-		while ((v = highTideB) < i) {
+		while ((v = tables[table].highTideB) < i) {
 			sqLowLevelMFence();
-			sqCompareAndSwap(highTideB, v, i);
+			sqCompareAndSwap(tables[table].highTideB, v, i);
 		}
 	}
 
-	checkSignalRequests = 1;
+	tables[table].checkSignalRequests = 1;
 
-	forceInterruptCheck();
 	return 1;
 }
 
@@ -184,45 +226,47 @@ doSignalExternalSemaphores(int externalSemaphoreTableSize)
 {
 	int i, switched;
 
-	if (!checkSignalRequests)
+	if (!(tables[currentTable].checkSignalRequests))
 		return 0;
 
 	switched = 0;
-	checkSignalRequests = 0;
+	tables[currentTable].checkSignalRequests = 0;
 
-	if (useTideA) {
-		useTideA = 0;
+	if (tables[currentTable].useTideA) {
+		tables[currentTable].useTideA = 0;
 		sqLowLevelMFence();
 		/* doing this here saves a bounds check in doSignalSemaphoreWithIndex */
-		if (highTideA >= externalSemaphoreTableSize)
-			highTideA = externalSemaphoreTableSize - 1;
-		for (i = lowTideA; i <= highTideA; i++)
-			while (signalRequests[i].responses != signalRequests[i].requests) {
+		if (tables[currentTable].highTideA >= externalSemaphoreTableSize)
+			tables[currentTable].highTideA = externalSemaphoreTableSize - 1;
+		for (i = tables[currentTable].lowTideA; i <= tables[currentTable].highTideA; i++)
+			while (tables[currentTable].signalRequests[i].responses != tables[currentTable].signalRequests[i].requests) {
 				if (doSignalSemaphoreWithIndex(i+1))
 					switched = 1;
-				++signalRequests[i].responses;
+				++tables[currentTable].signalRequests[i].responses;
 			}
-		lowTideA = (unsigned long)-1 >> 1, highTideA = -1;
+		tables[currentTable].lowTideA = (unsigned long)-1 >> 1;
+        tables[currentTable].highTideA = -1;
 	}
 	else {
-		useTideA = 1;
+		tables[currentTable].useTideA = 1;
 		sqLowLevelMFence();
 		/* doing this here saves a bounds check in doSignalSemaphoreWithIndex */
-		if (highTideB >= externalSemaphoreTableSize)
-			highTideB = externalSemaphoreTableSize - 1;
-		for (i = lowTideB; i <= highTideB; i++)
-			while (signalRequests[i].responses != signalRequests[i].requests) {
+		if (tables[currentTable].highTideB >= externalSemaphoreTableSize)
+			tables[currentTable].highTideB = externalSemaphoreTableSize - 1;
+		for (i = tables[currentTable].lowTideB; i <= tables[currentTable].highTideB; i++)
+			while (tables[currentTable].signalRequests[i].responses != tables[currentTable].signalRequests[i].requests) {
 				if (doSignalSemaphoreWithIndex(i+1))
 					switched = 1;
-				++signalRequests[i].responses;
+				++tables[currentTable].signalRequests[i].responses;
 			}
-		lowTideB = (unsigned long)-1 >> 1, highTideB = -1;
+		tables[currentTable].lowTideB = (unsigned long)-1 >> 1;
+        tables[currentTable].highTideB = -1;
 	}
 
 	/* If a signal came in while processing, check for signals again soon.
 	 */
 	sqLowLevelMFence();
-	if (checkSignalRequests)
+	if (tables[currentTable].checkSignalRequests)
 		forceInterruptCheck();
 
 	return switched;

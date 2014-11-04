@@ -47,6 +47,8 @@ struct VirtualMachine* sqGetInterpreterProxy(void);
 typedef struct VirtualMachine {
 	sqInt (*minorVersion)(void);
 	sqInt (*majorVersion)(void);
+    
+    void (*printOop)(sqInt oop);
 
 	/* InterpreterProxy methodsFor: 'stack access' */
 
@@ -162,6 +164,9 @@ typedef struct VirtualMachine {
 	sqInt (*success)(sqInt aBoolean);
 	sqInt (*superclassOf)(sqInt classPointer);
 
+    /* InterpreterProxy methodsFor: 'compiler' */
+    sqInt (*objectSpaceIndex)();
+    
 	/* InterpreterProxy methodsFor: 'compiler' */
 
 	CompilerHook *(*compilerHookVector)(void);

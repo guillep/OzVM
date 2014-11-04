@@ -83,6 +83,8 @@ sqInt isArray(sqInt oop);
 sqInt isOopMutable(sqInt oop);
 sqInt isOopImmutable(sqInt oop);
 
+void printOop(sqInt oop);
+
 /* InterpreterProxy methodsFor: 'converting' */
 sqInt  booleanValueOf(sqInt obj);
 sqInt  checkedIntegerValueOf(sqInt intOop);
@@ -359,6 +361,8 @@ struct VirtualMachine* sqGetInterpreterProxy(void)
 
 	VM->compilerHookVector= 0;
 	VM->setCompilerInitialized= 0;
+    
+    VM->printOop = printOop;
 
 #if VM_PROXY_MINOR > 1
 
