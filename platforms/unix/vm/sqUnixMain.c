@@ -1363,7 +1363,7 @@ static int vm_parseArgument(int argc, char **argv)
 		desiredNumStackPages = atoi(argv[1]);
 		return 2; }
       else if (!strcmp(argv[0], "--numextsems")) { 
-		ioSetMaxExtSemTableSize(atoi(argv[1]));
+		ioSetMaxExtSemTableSize(atoi(argv[1]), 0);
 		return 2; }
       else if (!strcmp(argv[0], "--noheartbeat")) { 
 		extern sqInt suppressHeartbeatFlag;
